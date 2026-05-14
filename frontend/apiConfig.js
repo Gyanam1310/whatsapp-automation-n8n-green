@@ -1,14 +1,21 @@
-// API base URL — empty string means all paths are relative to window.location.origin.
-// nginx proxies /drive/*, /submit, /api/* to the backend container.
-// This works for both Docker (port 80 via nginx) and direct backend (port 5000).
-const API_BASE_URL = "";
+// All API requests use relative paths so the app works identically on:
+//   - localhost (direct Docker)
+//   - Cloudflare Tunnel
+//   - any other reverse proxy
+//
+// nginx routes:
+//   /drive/*   → backend:5000
+//   /submit    → backend:5000
+//   /api/*     → backend:5000
+//   everything else → frontend container
 
 export function getApiBaseUrl() {
-  return API_BASE_URL;
+  return "";
 }
 
+// Returns a root-relative path. Absolute URLs (e.g. data: URIs) pass through unchanged.
 export function buildApiUrl(path) {
-  if (/^https?:\/\//i.test(path)) {
+  if (/^https?:\/\//i.test(path) || /^data:/i.test(path)) {
     return path;
   }
   return path.startsWith("/") ? path : `/${path}`;
@@ -19,11 +26,14 @@ export async function apiFetch(path, options = {}) {
 
   try {
     const response = await fetch(url, {
-      credentials: "include",
+      // No credentials: "include" — we don't use cookies.
+      // Omitting it avoids preflight CORS issues through tunnels/proxies.
       ...options,
     });
 
     if (!response.ok) {
+      // Temporary: log full response details to help diagnose tunnel issues.
+      console.error(`[API] ${options.method || "GET"} ${url} → ${response.status} ${response.statusText}`);
       const error = new Error(`API request failed with status ${response.status}`);
       error.statusCode = response.status;
       throw error;
@@ -31,12 +41,12 @@ export async function apiFetch(path, options = {}) {
 
     return response;
   } catch (error) {
-    console.error(`[API] Request failed: ${url}`, error);
-
     if (error instanceof Error && error.message.startsWith("API request failed")) {
       throw error;
     }
 
+    // Temporary: log network-level failures.
+    console.error(`[API] Network error: ${options.method || "GET"} ${url}`, error.message);
     throw new Error("Backend not reachable");
   }
 }

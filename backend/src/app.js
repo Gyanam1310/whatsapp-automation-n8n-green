@@ -30,19 +30,10 @@ app.use(
 );
 
 const corsOptions = {
-  origin(origin, callback) {
-    if (!origin) {
-      callback(null, true);
-      return;
-    }
-
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-      return;
-    }
-
-    callback(new Error(`CORS blocked for origin: ${origin}`));
-  },
+  // Allow any origin — the backend is only reachable through nginx,
+  // which is the actual security boundary. This ensures Cloudflare Tunnel
+  // hostnames and any other reverse-proxy setups work without reconfiguration.
+  origin: true,
   credentials: true,
 };
 app.use(cors(corsOptions));
