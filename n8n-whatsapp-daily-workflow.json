@@ -1,0 +1,95 @@
+{
+  "name": "Daily WhatsApp Announcement",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": [
+          {
+            "interval": [
+              {
+                "recurrence": "every",
+                "typeInterval": "hours",
+                "interval": 24
+              }
+            ]
+          }
+        ]
+      },
+      "id": "1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/api/automation/latest-row",
+        "method": "GET",
+        "options": {}
+      },
+      "id": "2",
+      "name": "Fetch Latest Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        450,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": []
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/api/automation/send-daily-announcement",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Send Daily Announcement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        650,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Latest Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest Row": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Announcement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "saveManualExecutions": true,
+    "executionTimeout": 3600
+  },
+  "versionId": "1"
+}

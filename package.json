@@ -1,0 +1,29 @@
+{
+  "name": "gaurakshan-whatsapp-automation",
+  "version": "1.0.0",
+  "description": "WhatsApp group automation with GreenAPI and n8n",
+  "main": "index.js",
+  "scripts": {
+    "dev:info": "node -e \"console.log('Backend: http://localhost:5000'); console.log('Frontend: http://localhost:5173');\"",
+    "backend": "npm --prefix backend run dev",
+    "frontend": "serve frontend -l 5173",
+    "dev": "npm run dev:info && concurrently --names BACKEND,FRONTEND --prefix-colors blue,magenta \"npm run backend\" \"npm run frontend\"",
+    "start": "npm --prefix backend run start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gyanam1310/whatsapp-automation.git"
+  },
+  "keywords": ["whatsapp", "automation", "greenapi", "n8n", "ngo"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Gyanam1310/whatsapp-automation/issues"
+  },
+  "homepage": "https://github.com/Gyanam1310/whatsapp-automation#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "serve": "^14.2.6"
+  }
+}

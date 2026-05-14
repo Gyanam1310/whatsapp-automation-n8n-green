@@ -1,0 +1,14 @@
+{
+  "watch": ["src"],
+  "ignore": [
+    "auth/*",
+    "auth/**",
+    "auth_info/*",
+    "auth_info/**",
+    "session/*",
+    "session/**",
+    "backend/auth/**",
+    "backend/auth_info/**",
+    "backend/session/**"
+  ]
+}

@@ -1,0 +1,98 @@
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# ── Google credentials ────────────────────────────────────────────────────────
+service-account.json
+**/service-account.json
+credentials.json
+**/credentials.json
+google-service-account.json
+
+# ── WhatsApp / session data ───────────────────────────────────────────────────
+auth/
+**/auth/
+auth_info/
+**/auth_info/
+session/
+**/session/
+sessions/
+baileys_auth_info/
+multidevice/
+.wwebjs_auth/
+.wwebjs_cache/
+backend/.wwebjs_auth/
+backend/.wwebjs_cache/
+evolution/
+.evolution/
+instances/
+
+# ── n8n local data ────────────────────────────────────────────────────────────
+.n8n/
+
+# ── Docker volumes / runtime data ────────────────────────────────────────────
+docker-data/
+postgres-data/
+redis-data/
+volumes/
+**/data/
+docker/volumes/
+docker-compose.override.yml
+docker-compose.*.env
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+*.pid
+*.pid.lock
+*.seed
+
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+build/
+coverage/
+
+# ── Runtime / cache ───────────────────────────────────────────────────────────
+tmp/
+temp/
+.cache/
+uploads/
+*.sqlite
+*.db
+
+# ── Certificates & keys ───────────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+*.p8
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.tgz
+__pycache__/
+*.py[cod]

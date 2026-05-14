@@ -1,0 +1,105 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gaurakshan-frontend
+    restart: unless-stopped
+    networks:
+      - gaurakshan-network
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: gaurakshan-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    networks:
+      - gaurakshan-network
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      CORS_ORIGIN: "http://localhost,http://localhost:3000,http://localhost:80,http://frontend,http://nginx"
+      API_BASE_URL: "http://backend:5000"
+      GOOGLE_DRIVE_ROOT_FOLDER_ID: "${GOOGLE_DRIVE_ROOT_FOLDER_ID:-}"
+      GOOGLE_SHEETS_SPREADSHEET_ID: "${GOOGLE_SHEETS_SPREADSHEET_ID:-}"
+      GOOGLE_SHEETS_TAB_NAME: "${GOOGLE_SHEETS_TAB_NAME:-Sheet1}"
+      GREENAPI_INSTANCE_ID: "${GREENAPI_INSTANCE_ID:-}"
+      GREENAPI_API_TOKEN: "${GREENAPI_API_TOKEN:-}"
+      GREENAPI_WEBHOOK_URL: "http://backend:5000/api/webhooks/whatsapp"
+      GREENAPI_URL: "https://api.green-api.com"
+      WHATSAPP_GROUP_ID: "${WHATSAPP_GROUP_ID:-}"
+      N8N_WEBHOOK_URL: "http://n8n:5678/webhook/whatsapp-trigger"
+      DAILY_CRON_EXPRESSION: "${DAILY_CRON_EXPRESSION:-0 8 * * *}"
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+      - gaurakshan-auth:/app/auth
+      - gaurakshan-auth-info:/app/auth_info
+      - gaurakshan-session:/app/session
+      - ./backend/service-account.json:/app/service-account.json
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: gaurakshan-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    networks:
+      - gaurakshan-network
+    environment:
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: "http"
+      WEBHOOK_URL: "http://localhost:5678/"
+      DB_TYPE: "sqlite"
+      DB_SQLITE_FILE: "/home/node/.n8n/database.sqlite"
+      N8N_BASIC_AUTH_ACTIVE: "false"
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: "Asia/Kolkata"
+    volumes:
+      - gaurakshan-n8n-data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  nginx:
+    image: nginx:alpine
+    container_name: gaurakshan-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - gaurakshan-network
+    depends_on:
+      - frontend
+      - backend
+      - n8n
+
+volumes:
+  backend_node_modules:
+  gaurakshan-auth:
+  gaurakshan-auth-info:
+  gaurakshan-session:
+  gaurakshan-n8n-data:
+
+networks:
+  gaurakshan-network:
+    driver: bridge

@@ -1,0 +1,22 @@
+# Backend .dockerignore
+node_modules
+npm-debug.log
+.env
+.env.local
+.env.*.local
+.git
+.gitignore
+README.md
+.DS_Store
+dist
+build
+coverage
+.vscode
+.idea
+*.log
+auth/*
+auth_info/*
+session/*
+.next
+.turbo
+.eslintcache
