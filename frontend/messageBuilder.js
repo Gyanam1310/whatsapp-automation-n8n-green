@@ -37,6 +37,8 @@
 
   var NEVER_PAD_ABOVE = 38;   // lines longer than this are left-aligned
   var MAX_PAD         = 12;
+  var LOCATION_EXTRA  = 10;   // extra indent for location line to visually
+                               // center it under the wider trust name above
 
   var TYPE_WIDTH = {
     header:   42,
@@ -65,6 +67,10 @@
     if (vlen > NEVER_PAD_ABOVE) return value;
     var refWidth = TYPE_WIDTH[type] || TYPE_WIDTH.normal;
     var pad = Math.min(Math.floor((refWidth - vlen) / 2), MAX_PAD);
+    // Location line gets extra indent to visually align under the trust name.
+    if (type === "location") {
+      pad = Math.min(pad + LOCATION_EXTRA, MAX_PAD + LOCATION_EXTRA);
+    }
     return pad > 0 ? " ".repeat(pad) + value : value;
   }
 
