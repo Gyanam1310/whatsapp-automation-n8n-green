@@ -757,17 +757,17 @@ messageForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  updatePreview();
-
-  const formData = getFormData();
-  // Use the edited preview content — user may have manually refined it.
-  const generatedMessage = getPreviewText() || latestFormattedMessage;
+  // Read the editor content BEFORE touching anything.
+  // Do NOT call updatePreview() here — it would overwrite the user's edits.
+  const generatedMessage = getPreviewText();
 
   if (!generatedMessage || !generatedMessage.trim()) {
     showStatus("Formatted message is required", "error");
     alert("Required fields are missing");
     return;
   }
+
+  const formData = getFormData();
 
   const inputDataObject = {
     postType: formData.postType,
@@ -805,14 +805,27 @@ messageForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(payload),
     });
 
-    await response.json();
+    // Parse response — handle cases where body may be empty or malformed
+    let result = {};
+    try {
+      result = await response.json();
+    } catch {
+      // Response was 200 but body wasn't valid JSON (e.g. tunnel truncation).
+      // Treat as success since the HTTP status was OK.
+      console.warn("[submit] Response body could not be parsed as JSON, but status was OK");
+    }
+
+    if (result.success === false) {
+      throw new Error(result.message || "Server returned failure");
+    }
+
     alert("Message scheduled successfully");
     showStatus("Message scheduled successfully", "success");
   } catch (err) {
     console.error("[submit] Request failed:", err);
     const message = err?.message?.includes("Backend not reachable")
       ? err.message
-      : "Failed to schedule message. Please try again.";
+      : err?.message || "Failed to schedule message. Please try again.";
     alert(`Error: ${message}`);
     showStatus(message, "error");
   }

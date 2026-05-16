@@ -8,7 +8,7 @@ const { createLogger } = require("./utils/logger");
 const logger = createLogger("Server");
 const PORT = env.PORT;
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   logger.info("Server listening", { port: PORT, env: appConfig.nodeEnv });
 
   // Startup env check — confirms Docker env vars are loaded correctly

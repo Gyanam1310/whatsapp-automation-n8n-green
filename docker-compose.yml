@@ -63,7 +63,10 @@ services:
       N8N_HOST: "0.0.0.0"
       N8N_PORT: "5678"
       N8N_PROTOCOL: "http"
-      WEBHOOK_URL: "http://localhost:5678/"
+      # Use internal nginx hostname so n8n-generated webhook URLs route correctly
+      # through the Docker network. For public webhook delivery (e.g. GreenAPI),
+      # set WEBHOOK_URL to your Cloudflare tunnel URL in the root .env file.
+      WEBHOOK_URL: "${N8N_PUBLIC_WEBHOOK_URL:-http://nginx:80/}"
       DB_TYPE: "sqlite"
       DB_SQLITE_FILE: "/home/node/.n8n/database.sqlite"
       N8N_BASIC_AUTH_ACTIVE: "false"
