@@ -6,14 +6,16 @@ const {
   sendDailyAnnouncementController,
   getPendingTodayController,
   markSentController,
+  markErrorController,
 } = require("../controllers/automation.controller");
 
 const router = express.Router();
 
-router.get("/latest-row", asyncHandler(getLatestRowController));
-router.post("/send-whatsapp", asyncHandler(sendWhatsAppMessageController));
-router.post("/send-daily-announcement", asyncHandler(sendDailyAnnouncementController));
-router.get("/pending-today", asyncHandler(getPendingTodayController));
-router.post("/mark-sent", asyncHandler(markSentController));
+router.get("/latest-row",              asyncHandler(getLatestRowController));
+router.post("/send-whatsapp",          asyncHandler(sendWhatsAppMessageController));
+router.post("/send-daily-announcement",asyncHandler(sendDailyAnnouncementController));
+router.get("/pending-today",           asyncHandler(getPendingTodayController));
+router.post("/mark-sent",              asyncHandler(markSentController));
+router.post("/mark-error",             asyncHandler(markErrorController));
 
 module.exports = router;

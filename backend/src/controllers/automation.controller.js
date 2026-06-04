@@ -236,10 +236,45 @@ async function markSentController(req, res) {
   }
 }
 
+async function markErrorController(req, res) {
+  try {
+    const { id, errorMessage } = req.body;
+
+    if (!id && id !== 0) {
+      return res.status(400).json({ success: false, error: "Missing required field: id" });
+    }
+
+    const row = await findRowById(id);
+
+    if (!row) {
+      return res.status(404).json({ success: false, error: `Row with id ${id} not found` });
+    }
+
+    const retryCount = parseInt(row.retryCount || "0", 10) + 1;
+
+    await updateRowStatus(row.rowIndex, {
+      status: "PENDING",   // keep retryable — n8n will pick it up again tomorrow
+      errorMessage: String(errorMessage || "Unknown error"),
+      retryCount,
+    });
+
+    logger.info("Row marked as ERROR (kept PENDING for retry)", { id, retryCount });
+
+    return res.json({ success: true, id, status: "PENDING", retryCount });
+  } catch (error) {
+    logger.error("markError failed", { error: error.message });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+}
+
 module.exports = {
   getLatestRowController,
   sendWhatsAppMessageController,
   sendDailyAnnouncementController,
   getPendingTodayController,
   markSentController,
+  markErrorController,
 };

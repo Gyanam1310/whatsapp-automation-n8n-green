@@ -1,95 +1,237 @@
 {
-  "name": "Daily WhatsApp Announcement",
+  "name": "Gaurakshan WhatsApp Daily Automation",
   "nodes": [
     {
       "parameters": {
-        "rule": [
-          {
-            "interval": [
-              {
-                "recurrence": "every",
-                "typeInterval": "hours",
-                "interval": 24
-              }
-            ]
-          }
-        ]
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
       },
-      "id": "1",
+      "id": "node-schedule",
       "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.cron",
+      "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1,
-      "position": [
-        250,
-        300
-      ]
+      "position": [240, 300],
+      "notes": "Runs daily at 8 AM IST. Change cron expression as needed."
     },
     {
       "parameters": {
-        "url": "http://localhost:5000/api/automation/latest-row",
+        "url": "http://backend:5000/api/automation/pending-today",
         "method": "GET",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
-      "id": "2",
-      "name": "Fetch Latest Row",
+      "id": "node-fetch-pending",
+      "name": "Fetch Pending Today",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [
-        450,
-        300
-      ],
-      "credentials": {
-        "httpHeaderAuth": []
-      }
+      "position": [460, 300],
+      "notes": "Fetches all PENDING rows where donationDate = today (IST). Returns array."
     },
     {
       "parameters": {
-        "url": "http://localhost:5000/api/automation/send-daily-announcement",
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "node-check-pending",
+      "name": "Any Pending?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "notes": "Stop if nothing to send today."
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "=",
+        "options": {}
+      },
+      "id": "node-split",
+      "name": "Loop Over Each Row",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 200],
+      "notes": "Processes one pending row at a time."
+    },
+    {
+      "parameters": {
+        "url": "=http://backend:5000/api/automation/send-whatsapp",
         "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "bodyParameters": {
-          "parameters": []
+          "parameters": [
+            {
+              "name": "chatId",
+              "value": "={{ $env.WHATSAPP_GROUP_ID }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.formattedMessage }}"
+            },
+            {
+              "name": "imageUrl",
+              "value": "={{ $json.imageUrl }}"
+            }
+          ]
         },
-        "options": {}
+        "options": {
+          "timeout": 60000
+        }
       },
-      "id": "3",
-      "name": "Send Daily Announcement",
+      "id": "node-send",
+      "name": "Send WhatsApp Message",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [
-        650,
-        300
-      ]
+      "position": [1120, 200],
+      "onError": "continueErrorOutput",
+      "notes": "Sends image + caption to WhatsApp group via backend."
+    },
+    {
+      "parameters": {
+        "url": "=http://backend:5000/api/automation/mark-sent",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $('Loop Over Each Row').item.json.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-mark-sent",
+      "name": "Mark as SENT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 120],
+      "notes": "Updates Google Sheets status to SENT. Row will never be fetched again."
+    },
+    {
+      "parameters": {
+        "url": "=http://backend:5000/api/automation/mark-error",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $('Loop Over Each Row').item.json.id }}"
+            },
+            {
+              "name": "errorMessage",
+              "value": "={{ $json.error?.message || $json.message || 'GreenAPI send failed' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-mark-error",
+      "name": "Mark as ERROR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300],
+      "notes": "Keeps status PENDING but logs error. Will retry on next run."
+    },
+    {
+      "parameters": {},
+      "id": "node-no-pending",
+      "name": "No Pending Today",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [680, 460],
+      "notes": "Nothing to send today — workflow ends cleanly."
     }
   ],
   "connections": {
     "Schedule Trigger": {
       "main": [
-        [
-          {
-            "node": "Fetch Latest Row",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Fetch Pending Today", "type": "main", "index": 0 }]
       ]
     },
-    "Fetch Latest Row": {
+    "Fetch Pending Today": {
       "main": [
-        [
-          {
-            "node": "Send Daily Announcement",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Any Pending?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Any Pending?": {
+      "main": [
+        [{ "node": "Loop Over Each Row", "type": "main", "index": 0 }],
+        [{ "node": "No Pending Today",   "type": "main", "index": 0 }]
+      ]
+    },
+    "Loop Over Each Row": {
+      "main": [
+        [{ "node": "Send WhatsApp Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send WhatsApp Message": {
+      "main": [
+        [{ "node": "Mark as SENT",  "type": "main", "index": 0 }],
+        [{ "node": "Mark as ERROR", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark as SENT": {
+      "main": [
+        [{ "node": "Loop Over Each Row", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark as ERROR": {
+      "main": [
+        [{ "node": "Loop Over Each Row", "type": "main", "index": 0 }]
       ]
     }
   },
   "active": false,
   "settings": {
     "saveManualExecutions": true,
-    "executionTimeout": 3600
+    "executionTimeout": 3600,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
   },
-  "versionId": "1"
+  "versionId": "2"
 }

@@ -197,14 +197,24 @@ async function getLatestRow() {
 async function updateRowStatus(rowIndex, updates) {
   assertSheetsConfigured();
 
-  // Build value ranges using A1 notation.
-  // Column mapping (1-based): G=status(7), I=sentAt(9), J=errorMessage(10)
+  // Column mapping (1-based A1 notation):
+  // G = status (col 7)
+  // H = retryCount (col 8)
+  // I = sentAt (col 9)
+  // J = errorMessage (col 10)
   const data = [];
 
   if (updates.status !== undefined) {
     data.push({
       range: `${SHEET_TAB_NAME}!G${rowIndex}`,
       values: [[normalizeStatus(updates.status)]],
+    });
+  }
+
+  if (updates.retryCount !== undefined) {
+    data.push({
+      range: `${SHEET_TAB_NAME}!H${rowIndex}`,
+      values: [[normalizeRetryCount(updates.retryCount)]],
     });
   }
 
