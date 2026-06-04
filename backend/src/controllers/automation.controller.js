@@ -1,281 +1,210 @@
 const { createLogger } = require("../utils/logger");
 const {
   getLatestRow,
-  updateRowStatus,
   getPendingToday,
   findRowById,
+  findRowByIndex,
   claimRowForProcessing,
+  markRowSent,
+  markRowError,
+  updateRowStatus,
 } = require("../services/googleSheets.service");
 const { sendText, sendImage } = require("../services/greenapi.service");
 const appConfig = require("../config/appConfig");
 
 const logger = createLogger("AutomationController");
 
-async function getLatestRowController(req, res, next) {
-  try {
-    logger.debug("Fetching latest row");
-
-    const row = await getLatestRow();
-
-    logger.info("Latest row fetched", {
-      id: row.id,
-      familyName: row.familyName,
-      status: row.status,
-    });
-
-    return res.json({
-      success: true,
-      data: row,
-    });
-  } catch (error) {
-    logger.error("Failed to fetch latest row", { error: error.message });
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-}
-
-async function sendWhatsAppMessageController(req, res, next) {
-  try {
-    const { chatId, message, imageUrl } = req.body;
-
-    logger.info("Sending WhatsApp message", {
-      chatId,
-      messagePreview: message?.substring(0, 50),
-      hasImage: !!imageUrl,
-    });
-
-    if (!chatId || !message) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing required fields: chatId and message",
-      });
-    }
-
-    let result;
-    if (imageUrl) {
-      logger.debug("Sending message with image", { imageUrl });
-      result = await sendImage(chatId, imageUrl, message);
-    } else {
-      logger.debug("Sending text message only");
-      result = await sendText(chatId, message);
-    }
-
-    if (!result.success) {
-      logger.warn("Failed to send message via GreenAPI", { error: result.error });
-      return res.status(502).json({
-        success: false,
-        error: result.error,
-      });
-    }
-
-    const idMessage = result.data?.idMessage;
-
-    logger.info("Message sent successfully", { idMessage });
-
-    return res.json({
-      success: true,
-      idMessage,
-      message: "Message sent to WhatsApp group",
-    });
-  } catch (error) {
-    logger.error("WhatsApp send error", { error: error.message });
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-}
-
-async function sendDailyAnnouncementController(req, res, next) {
-  try {
-    logger.info("Starting daily announcement workflow");
-
-    const latestRow = await getLatestRow();
-
-    if (!latestRow) {
-      logger.warn("No rows found to send");
-      return res.status(400).json({
-        success: false,
-        error: "No rows found in sheet",
-      });
-    }
-
-    logger.debug("Latest row retrieved", {
-      id: latestRow.id,
-      familyName: latestRow.familyName,
-    });
-
-    if (latestRow.status === "SENT") {
-      logger.info("Latest row already sent, skipping", { id: latestRow.id });
-      return res.status(400).json({
-        success: false,
-        error: "Latest row already sent",
-      });
-    }
-
-    const message = latestRow.formattedMessage;
-    const imageUrl = latestRow.imageUrl;
-    const chatId = appConfig.whatsapp.groupId;
-
-    if (!message) {
-      logger.error("No message in latest row");
-      return res.status(400).json({
-        success: false,
-        error: "No formatted message in sheet",
-      });
-    }
-
-    let sendResult;
-    if (imageUrl) {
-      logger.debug("Sending announcement with image");
-      sendResult = await sendImage(chatId, imageUrl, message);
-    } else {
-      logger.debug("Sending announcement as text");
-      sendResult = await sendText(chatId, message);
-    }
-
-    if (!sendResult.success) {
-      logger.error("Failed to send announcement", { error: sendResult.error });
-
-      await updateRowStatus(latestRow.rowIndex, {
-        status: "ERROR",
-        errorMessage: String(sendResult.error?.message || sendResult.error),
-      }).catch((err) => {
-        logger.error("Failed to update error status", { error: err.message });
-      });
-
-      return res.status(502).json({
-        success: false,
-        error: sendResult.error,
-      });
-    }
-
-    logger.info("Announcement sent, updating sheet status", {
-      id: latestRow.id,
-      idMessage: sendResult.data?.idMessage,
-    });
-
-    await updateRowStatus(latestRow.rowIndex, {
-      status: "SENT",
-      sentAt: new Date().toISOString(),
-    });
-
-    logger.info("Daily announcement completed successfully", {
-      submissionId: latestRow.id,
-      family: latestRow.familyName,
-    });
-
-    return res.json({
-      success: true,
-      submissionId: latestRow.id,
-      idMessage: sendResult.data?.idMessage,
-      message: "Daily announcement sent successfully",
-    });
-  } catch (error) {
-    logger.error("Daily announcement error", { error: error.message, stack: error.stack });
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-}
-
+// ─── GET /api/automation/pending-today ───────────────────────────────────────
+// Returns all PENDING rows for today (IST), including rowIndex.
+// n8n uses rowIndex — not id — to claim/update rows.
 async function getPendingTodayController(req, res) {
   try {
     const rows = await getPendingToday();
 
+    logger.info("[pending-today] Returning pending rows", { count: rows.length });
+
     const result = rows.map((row) => ({
-      id: row.id,
-      donationDate: row.donationDate,
-      familyName: row.familyName,
-      imageUrl: row.imageUrl,
+      rowIndex:         row.rowIndex,   // PRIMARY KEY for all subsequent operations
+      id:               row.id,
+      donationDate:     row.donationDate,
+      familyName:       row.familyName,
+      imageUrl:         row.imageUrl,
       formattedMessage: row.formattedMessage,
-      status: row.status,
+      status:           row.status,
+      retryCount:       row.retryCount,
     }));
 
     return res.json(result);
   } catch (error) {
-    logger.error("getPendingToday failed", { error: error.message });
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      error: error.message,
-    });
+    logger.error("[pending-today] failed", { error: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 }
 
+// ─── POST /api/automation/claim-row ──────────────────────────────────────────
+// Atomically transitions a row from PENDING → PROCESSING.
+// Returns 409 if already claimed or sent — n8n should skip on 409.
+// Body: { rowIndex: number }
+async function claimRowController(req, res) {
+  try {
+    const rowIndex = parseInt(req.body.rowIndex, 10);
+
+    if (!rowIndex || isNaN(rowIndex)) {
+      return res.status(400).json({ success: false, error: "Missing or invalid rowIndex" });
+    }
+
+    logger.info("[claim-row] Attempting to claim row", { rowIndex });
+
+    const result = await claimRowForProcessing(rowIndex);
+
+    if (!result.claimed) {
+      logger.warn("[claim-row] Row not claimable — skipping", { rowIndex, reason: result.reason, status: result.status });
+      return res.status(409).json({
+        success: false,
+        claimed: false,
+        reason: result.reason,
+        currentStatus: result.status || null,
+      });
+    }
+
+    logger.info("[claim-row] Row claimed successfully", {
+      rowIndex,
+      id: result.row.id,
+      familyName: result.row.familyName,
+    });
+
+    return res.json({
+      success: true,
+      claimed: true,
+      rowIndex,
+      id: result.row.id,
+      familyName: result.row.familyName,
+      imageUrl: result.row.imageUrl,
+      formattedMessage: result.row.formattedMessage,
+    });
+  } catch (error) {
+    logger.error("[claim-row] failed", { error: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+}
+
+// ─── POST /api/automation/mark-sent ──────────────────────────────────────────
+// Transitions PROCESSING → SENT. Idempotent on already-SENT rows.
+// Body: { rowIndex: number }
 async function markSentController(req, res) {
   try {
-    const { id } = req.body;
+    const rowIndex = parseInt(req.body.rowIndex, 10);
 
-    if (!id && id !== 0) {
-      return res.status(400).json({ success: false, error: "Missing required field: id" });
+    if (!rowIndex || isNaN(rowIndex)) {
+      return res.status(400).json({ success: false, error: "Missing or invalid rowIndex" });
     }
 
-    const row = await findRowById(id);
+    logger.info("[mark-sent] Marking row as SENT", { rowIndex });
 
-    if (!row) {
-      return res.status(404).json({ success: false, error: `Row with id ${id} not found` });
+    const result = await markRowSent(rowIndex);
+
+    if (!result.success) {
+      return res.status(404).json({ success: false, error: result.reason });
     }
 
-    await updateRowStatus(row.rowIndex, {
-      status: "SENT",
-      sentAt: new Date().toISOString(),
-      errorMessage: "",
-    });
-
-    logger.info("Row marked as SENT", { id, rowIndex: row.rowIndex });
-
-    return res.json({ success: true, id, status: "SENT" });
+    logger.info("[mark-sent] Row marked SENT", { rowIndex, reason: result.reason });
+    return res.json({ success: true, rowIndex, status: "SENT" });
   } catch (error) {
-    logger.error("markSent failed", { error: error.message });
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      error: error.message,
-    });
+    logger.error("[mark-sent] failed", { error: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
 }
 
+// ─── POST /api/automation/mark-error ─────────────────────────────────────────
+// Transitions PROCESSING → PENDING (with incremented retryCount).
+// Row remains eligible for retry on the next run.
+// Body: { rowIndex: number, errorMessage: string }
 async function markErrorController(req, res) {
   try {
-    const { id, errorMessage } = req.body;
+    const rowIndex = parseInt(req.body.rowIndex, 10);
+    const errorMessage = String(req.body.errorMessage || "Unknown error");
 
-    if (!id && id !== 0) {
-      return res.status(400).json({ success: false, error: "Missing required field: id" });
+    if (!rowIndex || isNaN(rowIndex)) {
+      return res.status(400).json({ success: false, error: "Missing or invalid rowIndex" });
     }
 
-    const row = await findRowById(id);
+    logger.warn("[mark-error] Marking row as ERROR", { rowIndex, errorMessage });
 
-    if (!row) {
-      return res.status(404).json({ success: false, error: `Row with id ${id} not found` });
+    const result = await markRowError(rowIndex, errorMessage);
+
+    if (!result.success) {
+      return res.status(404).json({ success: false, error: result.reason });
     }
 
-    const retryCount = parseInt(row.retryCount || "0", 10) + 1;
-
-    await updateRowStatus(row.rowIndex, {
-      status: "PENDING",   // keep retryable — n8n will pick it up again tomorrow
-      errorMessage: String(errorMessage || "Unknown error"),
-      retryCount,
-    });
-
-    logger.info("Row marked as ERROR (kept PENDING for retry)", { id, retryCount });
-
-    return res.json({ success: true, id, status: "PENDING", retryCount });
+    logger.info("[mark-error] Row returned to PENDING for retry", { rowIndex, retryCount: result.retryCount });
+    return res.json({ success: true, rowIndex, status: "PENDING", retryCount: result.retryCount });
   } catch (error) {
-    logger.error("markError failed", { error: error.message });
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      error: error.message,
-    });
+    logger.error("[mark-error] failed", { error: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
   }
+}
+
+// ─── POST /api/automation/send-whatsapp ──────────────────────────────────────
+// Sends a WhatsApp message directly via GreenAPI.
+// n8n calls this after claiming a row.
+// Body: { chatId, message, imageUrl }
+async function sendWhatsAppMessageController(req, res) {
+  try {
+    const { chatId, message, imageUrl } = req.body;
+
+    logger.info("[send-whatsapp] Sending message", {
+      chatId,
+      hasImage: !!imageUrl,
+      preview: message?.substring(0, 60),
+    });
+
+    if (!chatId || !message) {
+      return res.status(400).json({ success: false, error: "Missing required fields: chatId and message" });
+    }
+
+    const result = imageUrl
+      ? await sendImage(chatId, imageUrl, message)
+      : await sendText(chatId, message);
+
+    if (!result.success) {
+      logger.warn("[send-whatsapp] GreenAPI send failed", { error: result.error });
+      return res.status(502).json({ success: false, error: result.error });
+    }
+
+    logger.info("[send-whatsapp] Message sent successfully", { idMessage: result.data?.idMessage });
+    return res.json({ success: true, idMessage: result.data?.idMessage });
+  } catch (error) {
+    logger.error("[send-whatsapp] failed", { error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+// ─── Legacy endpoints (kept for backward compatibility) ───────────────────────
+
+async function getLatestRowController(req, res) {
+  try {
+    const row = await getLatestRow();
+    logger.info("[latest-row] fetched", { id: row.id, status: row.status });
+    return res.json({ success: true, data: row });
+  } catch (error) {
+    logger.error("[latest-row] failed", { error: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+}
+
+async function sendDailyAnnouncementController(req, res) {
+  return res.status(410).json({
+    success: false,
+    error: "This endpoint is deprecated. Use /pending-today + /claim-row + /send-whatsapp + /mark-sent workflow instead.",
+  });
 }
 
 module.exports = {
-  getLatestRowController,
-  sendWhatsAppMessageController,
-  sendDailyAnnouncementController,
   getPendingTodayController,
+  claimRowController,
   markSentController,
   markErrorController,
+  sendWhatsAppMessageController,
+  getLatestRowController,
+  sendDailyAnnouncementController,
 };

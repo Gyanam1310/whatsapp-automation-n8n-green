@@ -1,5 +1,5 @@
 {
-  "name": "Gaurakshan WhatsApp Daily Automation",
+  "name": "Gaurakshan WhatsApp Daily Automation v3",
   "nodes": [
     {
       "parameters": {
@@ -16,30 +16,34 @@
       "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1,
-      "position": [240, 300],
-      "notes": "Runs daily at 8 AM IST. Change cron expression as needed."
+      "position": [200, 300],
+      "notes": "Runs daily at 8 AM IST. Safe to run manually — claim-row prevents duplicates."
     },
+
     {
       "parameters": {
         "url": "http://backend:5000/api/automation/pending-today",
         "method": "GET",
-        "options": {
-          "timeout": 30000
+        "options": { "timeout": 30000 },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
         }
       },
       "id": "node-fetch-pending",
       "name": "Fetch Pending Today",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [460, 300],
-      "notes": "Fetches all PENDING rows where donationDate = today (IST). Returns array."
+      "position": [420, 300],
+      "notes": "Returns only PENDING rows for today (IST) with retryCount < 5. Each row includes rowIndex."
     },
+
     {
       "parameters": {
         "conditions": {
           "number": [
             {
-              "value1": "={{ $json.length }}",
+              "value1": "={{ Array.isArray($json) ? $json.length : 0 }}",
               "operation": "larger",
               "value2": 0
             }
@@ -50,188 +54,225 @@
       "name": "Any Pending?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [680, 300],
-      "notes": "Stop if nothing to send today."
+      "position": [640, 300],
+      "notes": "true → process rows. false → stop cleanly."
     },
+
+    {
+      "parameters": {},
+      "id": "node-no-pending",
+      "name": "Nothing To Send",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [860, 460],
+      "notes": "No pending rows today — workflow ends cleanly."
+    },
+
     {
       "parameters": {
-        "fieldToSplitOut": "=",
+        "batchSize": 1,
         "options": {}
       },
       "id": "node-split",
       "name": "Loop Over Each Row",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [900, 200],
-      "notes": "Processes one pending row at a time."
+      "position": [860, 220],
+      "notes": "Processes one row at a time. Each item has rowIndex, formattedMessage, imageUrl, familyName."
     },
+
     {
       "parameters": {
-        "url": "=http://backend:5000/api/automation/send-whatsapp",
+        "url": "http://backend:5000/api/automation/claim-row",
         "method": "POST",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ rowIndex: $json.rowIndex }) }}",
+        "options": {
+          "timeout": 15000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "id": "node-claim",
+      "name": "Claim Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1080, 220],
+      "notes": "Transitions PENDING → PROCESSING. Returns 409 if already claimed — skip on 409."
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
             {
-              "name": "chatId",
-              "value": "={{ $env.WHATSAPP_GROUP_ID }}"
-            },
-            {
-              "name": "message",
-              "value": "={{ $json.formattedMessage }}"
-            },
-            {
-              "name": "imageUrl",
-              "value": "={{ $json.imageUrl }}"
+              "value1": "={{ $json.$response?.statusCode ?? 200 }}",
+              "operation": "equal",
+              "value2": 200
             }
           ]
+        }
+      },
+      "id": "node-claim-ok",
+      "name": "Claim Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1300, 220],
+      "notes": "200 = proceed with send. 409 = already claimed/sent — skip this row."
+    },
+
+    {
+      "parameters": {},
+      "id": "node-skip-row",
+      "name": "Skip Row",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1520, 380],
+      "notes": "Row already PROCESSING or SENT — safe to skip. Loop continues to next row."
+    },
+
+    {
+      "parameters": {
+        "url": "http://backend:5000/api/automation/send-whatsapp",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
         },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: '120363429056904681@g.us', message: $('Loop Over Each Row').item.json.formattedMessage, imageUrl: $('Loop Over Each Row').item.json.imageUrl }) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 60000,
+          "response": { "response": { "neverError": true } }
         }
       },
       "id": "node-send",
-      "name": "Send WhatsApp Message",
+      "name": "Send WhatsApp",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1120, 200],
-      "onError": "continueErrorOutput",
-      "notes": "Sends image + caption to WhatsApp group via backend."
+      "position": [1520, 160],
+      "notes": "Sends image + formatted message to WhatsApp group via GreenAPI."
     },
+
     {
       "parameters": {
-        "url": "=http://backend:5000/api/automation/mark-sent",
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success === true }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-send-ok",
+      "name": "Send Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1740, 160],
+      "notes": "true → mark-sent. false → mark-error (row returns to PENDING for retry)."
+    },
+
+    {
+      "parameters": {
+        "url": "http://backend:5000/api/automation/mark-sent",
         "method": "POST",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "id",
-              "value": "={{ $('Loop Over Each Row').item.json.id }}"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        }
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ rowIndex: $('Loop Over Each Row').item.json.rowIndex }) }}",
+        "options": { "timeout": 15000 }
       },
       "id": "node-mark-sent",
-      "name": "Mark as SENT",
+      "name": "Mark SENT",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1340, 120],
-      "notes": "Updates Google Sheets status to SENT. Row will never be fetched again."
+      "position": [1960, 80],
+      "notes": "Transitions PROCESSING → SENT. Row is permanently excluded from future runs."
     },
+
     {
       "parameters": {
-        "url": "=http://backend:5000/api/automation/mark-error",
+        "url": "http://backend:5000/api/automation/mark-error",
         "method": "POST",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "id",
-              "value": "={{ $('Loop Over Each Row').item.json.id }}"
-            },
-            {
-              "name": "errorMessage",
-              "value": "={{ $json.error?.message || $json.message || 'GreenAPI send failed' }}"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 15000
-        }
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ rowIndex: $('Loop Over Each Row').item.json.rowIndex, errorMessage: $json.error || $json.message || 'GreenAPI send failed' }) }}",
+        "options": { "timeout": 15000 }
       },
       "id": "node-mark-error",
-      "name": "Mark as ERROR",
+      "name": "Mark ERROR",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1340, 300],
-      "notes": "Keeps status PENDING but logs error. Will retry on next run."
-    },
-    {
-      "parameters": {},
-      "id": "node-no-pending",
-      "name": "No Pending Today",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [680, 460],
-      "notes": "Nothing to send today — workflow ends cleanly."
+      "position": [1960, 280],
+      "notes": "Returns row to PENDING with retryCount++. Will be retried on the next workflow run."
     }
   ],
+
   "connections": {
     "Schedule Trigger": {
-      "main": [
-        [{ "node": "Fetch Pending Today", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Fetch Pending Today", "type": "main", "index": 0 }]]
     },
     "Fetch Pending Today": {
-      "main": [
-        [{ "node": "Any Pending?", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Any Pending?", "type": "main", "index": 0 }]]
     },
     "Any Pending?": {
       "main": [
         [{ "node": "Loop Over Each Row", "type": "main", "index": 0 }],
-        [{ "node": "No Pending Today",   "type": "main", "index": 0 }]
+        [{ "node": "Nothing To Send",    "type": "main", "index": 0 }]
       ]
     },
     "Loop Over Each Row": {
+      "main": [[{ "node": "Claim Row", "type": "main", "index": 0 }]]
+    },
+    "Claim Row": {
+      "main": [[{ "node": "Claim Succeeded?", "type": "main", "index": 0 }]]
+    },
+    "Claim Succeeded?": {
       "main": [
-        [{ "node": "Send WhatsApp Message", "type": "main", "index": 0 }]
+        [{ "node": "Send WhatsApp", "type": "main", "index": 0 }],
+        [{ "node": "Skip Row",      "type": "main", "index": 0 }]
       ]
     },
-    "Send WhatsApp Message": {
+    "Skip Row": {
+      "main": [[{ "node": "Loop Over Each Row", "type": "main", "index": 0 }]]
+    },
+    "Send WhatsApp": {
+      "main": [[{ "node": "Send Succeeded?", "type": "main", "index": 0 }]]
+    },
+    "Send Succeeded?": {
       "main": [
-        [{ "node": "Mark as SENT",  "type": "main", "index": 0 }],
-        [{ "node": "Mark as ERROR", "type": "main", "index": 0 }]
+        [{ "node": "Mark SENT",  "type": "main", "index": 0 }],
+        [{ "node": "Mark ERROR", "type": "main", "index": 0 }]
       ]
     },
-    "Mark as SENT": {
-      "main": [
-        [{ "node": "Loop Over Each Row", "type": "main", "index": 0 }]
-      ]
+    "Mark SENT": {
+      "main": [[{ "node": "Loop Over Each Row", "type": "main", "index": 0 }]]
     },
-    "Mark as ERROR": {
-      "main": [
-        [{ "node": "Loop Over Each Row", "type": "main", "index": 0 }]
-      ]
+    "Mark ERROR": {
+      "main": [[{ "node": "Loop Over Each Row", "type": "main", "index": 0 }]]
     }
   },
+
   "active": false,
   "settings": {
     "saveManualExecutions": true,
     "executionTimeout": 3600,
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all"
+    "saveDataSuccessExecution": "all",
+    "executionOrder": "v1"
   },
-  "versionId": "2"
+  "versionId": "3"
 }
