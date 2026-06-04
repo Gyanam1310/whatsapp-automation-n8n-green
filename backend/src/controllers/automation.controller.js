@@ -88,18 +88,46 @@ async function claimRowController(req, res) {
   }
 }
 
+// ─── Helper: resolve rowIndex from either payload format ─────────────────────
+// Accepts { rowIndex } (new) or { id } (legacy n8n workflows).
+// Returns the integer rowIndex, or null if it cannot be resolved.
+async function resolveRowIndex(body) {
+  // Preferred: explicit rowIndex
+  const ri = parseInt(body.rowIndex, 10);
+  if (!isNaN(ri) && ri > 0) {
+    return ri;
+  }
+
+  // Legacy fallback: look up by id
+  const id = String(body.id || "").trim();
+  if (!id) return null;
+
+  logger.info("[resolveRowIndex] Falling back to id lookup", { id });
+  const row = await findRowById(id);
+  if (!row) {
+    logger.warn("[resolveRowIndex] No row found for id", { id });
+    return null;
+  }
+
+  logger.info("[resolveRowIndex] Resolved via id", { id, rowIndex: row.rowIndex, status: row.status });
+  return row.rowIndex;
+}
+
 // ─── POST /api/automation/mark-sent ──────────────────────────────────────────
-// Transitions PROCESSING → SENT. Idempotent on already-SENT rows.
-// Body: { rowIndex: number }
+// Accepts: { rowIndex: number }  — preferred
+//      OR: { id: string }        — legacy (n8n workflows imported before v3)
 async function markSentController(req, res) {
   try {
-    const rowIndex = parseInt(req.body.rowIndex, 10);
+    logger.info("[mark-sent] Received payload", { body: req.body });
 
-    if (!rowIndex || isNaN(rowIndex)) {
-      return res.status(400).json({ success: false, error: "Missing or invalid rowIndex" });
+    const rowIndex = await resolveRowIndex(req.body);
+
+    if (!rowIndex) {
+      logger.error("[mark-sent] Cannot resolve row — neither rowIndex nor id provided/found", { body: req.body });
+      return res.status(400).json({ success: false, error: "Provide rowIndex or a valid id" });
     }
 
-    logger.info("[mark-sent] Marking row as SENT", { rowIndex });
+    logger.info("[mark-sent] Resolved rowIndex", { rowIndex });
 
     const result = await markRowSent(rowIndex);
 
@@ -107,7 +135,7 @@ async function markSentController(req, res) {
       return res.status(404).json({ success: false, error: result.reason });
     }
 
-    logger.info("[mark-sent] Row marked SENT", { rowIndex, reason: result.reason });
+    logger.info("[mark-sent] Row marked SENT", { rowIndex, reason: result.reason || "updated" });
     return res.json({ success: true, rowIndex, status: "SENT" });
   } catch (error) {
     logger.error("[mark-sent] failed", { error: error.message });
@@ -116,19 +144,21 @@ async function markSentController(req, res) {
 }
 
 // ─── POST /api/automation/mark-error ─────────────────────────────────────────
-// Transitions PROCESSING → PENDING (with incremented retryCount).
-// Row remains eligible for retry on the next run.
-// Body: { rowIndex: number, errorMessage: string }
+// Accepts: { rowIndex: number, errorMessage: string }  — preferred
+//      OR: { id: string,       errorMessage: string }  — legacy
 async function markErrorController(req, res) {
   try {
-    const rowIndex = parseInt(req.body.rowIndex, 10);
     const errorMessage = String(req.body.errorMessage || "Unknown error");
+    logger.warn("[mark-error] Received payload", { body: { ...req.body, errorMessage } });
 
-    if (!rowIndex || isNaN(rowIndex)) {
-      return res.status(400).json({ success: false, error: "Missing or invalid rowIndex" });
+    const rowIndex = await resolveRowIndex(req.body);
+
+    if (!rowIndex) {
+      logger.error("[mark-error] Cannot resolve row — neither rowIndex nor id provided/found", { body: req.body });
+      return res.status(400).json({ success: false, error: "Provide rowIndex or a valid id" });
     }
 
-    logger.warn("[mark-error] Marking row as ERROR", { rowIndex, errorMessage });
+    logger.warn("[mark-error] Resolved rowIndex", { rowIndex, errorMessage });
 
     const result = await markRowError(rowIndex, errorMessage);
 
