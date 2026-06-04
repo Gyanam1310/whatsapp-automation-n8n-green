@@ -10,6 +10,19 @@
 //   everything else → frontend container
 
 export function getApiBaseUrl() {
+  // When running the frontend on a non-standard port (e.g. :5173 during local dev),
+  // we assume the backend is available at http://localhost:5000 so API requests
+  // to paths like `/drive/*` work without an external reverse proxy.
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const port = window.location.port;
+
+    if ((host === "localhost" || host === "127.0.0.1") && port && port !== "80" && port !== "443") {
+      return "http://localhost:5000";
+    }
+  }
+
+  // Default: use root-relative paths so reverse proxies (nginx in Docker) can route.
   return "";
 }
 
@@ -22,7 +35,8 @@ export function buildApiUrl(path) {
 }
 
 export async function apiFetch(path, options = {}) {
-  const url = buildApiUrl(path);
+  const base = getApiBaseUrl();
+  const url = base ? `${base}${buildApiUrl(path)}` : buildApiUrl(path);
 
   try {
     const response = await fetch(url, {

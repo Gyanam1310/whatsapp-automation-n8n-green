@@ -67,13 +67,14 @@ services:
       # through the Docker network. For public webhook delivery (e.g. GreenAPI),
       # set WEBHOOK_URL to your Cloudflare tunnel URL in the root .env file.
       WEBHOOK_URL: "${N8N_PUBLIC_WEBHOOK_URL:-http://nginx:80/}"
+      N8N_USER_FOLDER: "/home/node/.n8n"
       DB_TYPE: "sqlite"
       DB_SQLITE_FILE: "/home/node/.n8n/database.sqlite"
       N8N_BASIC_AUTH_ACTIVE: "false"
       N8N_SECURE_COOKIE: "false"
       GENERIC_TIMEZONE: "Asia/Kolkata"
     volumes:
-      - gaurakshan-n8n-data:/home/node/.n8n
+      - ./n8n-data:/home/node/.n8n
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
       interval: 30s
@@ -101,7 +102,6 @@ volumes:
   gaurakshan-auth:
   gaurakshan-auth-info:
   gaurakshan-session:
-  gaurakshan-n8n-data:
 
 networks:
   gaurakshan-network:

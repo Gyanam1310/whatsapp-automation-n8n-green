@@ -1,4 +1,4 @@
-import { apiFetch, buildApiUrl } from "./apiConfig.js";
+import { apiFetch, buildApiUrl, getApiBaseUrl } from "./apiConfig.js";
 
 const familySelect = document.getElementById("familySelect");
 const familyNameInput = document.getElementById("familyName");
@@ -422,9 +422,23 @@ function toMultipartFormData(formData, file) {
 
 function syncSelectedImagePreview() {
   if (!selectedImageUrl) {
-    selectedImagePreviewContainer.style.display = "none";
-    selectedImagePreviewContainer.style.opacity = "0";
-    selectedImagePreview.removeAttribute("src");
+    // Show a clear empty state instead of leaving the previous image visible
+    try {
+      selectedImagePreview.removeAttribute("src");
+    } catch (e) {
+      /* ignore */
+    }
+
+    if (selectedImagePreviewContainer) {
+      selectedImagePreviewContainer.replaceChildren();
+      const hint = document.createElement("p");
+      hint.className = "hint preview-hint";
+      hint.textContent = "No image selected";
+      selectedImagePreviewContainer.appendChild(hint);
+      selectedImagePreviewContainer.style.display = "block";
+      selectedImagePreviewContainer.style.opacity = "1";
+    }
+
     return;
   }
 
@@ -469,14 +483,21 @@ async function loadFamilies() {
   showStatus("Loading families...", "");
 
   try {
+    // Debug: log which backend base URL we're using
+    console.log("[loadFamilies] getApiBaseUrl:", getApiBaseUrl());
+
     const response = await apiFetch("/drive/folders");
+    console.log("[loadFamilies] raw fetch response:", response);
 
     const data = await response.json();
+    console.log("[loadFamilies] parsed JSON:", data);
     const rawFolders = Array.isArray(data?.data)
       ? data.data
       : Array.isArray(data?.folders)
         ? data.folders
         : null;
+
+    console.log("[loadFamilies] rawFolders:", rawFolders);
 
     if (!rawFolders) {
       throw new Error("Invalid folders response format");
@@ -489,6 +510,8 @@ async function loadFamilies() {
       }))
       .filter((folder) => folder.id && folder.name);
 
+    // Debug: state before render
+    console.log("[loadFamilies] driveFamiliesById before clear:", Array.from(driveFamiliesById.entries()));
     driveFamiliesById.clear();
     familySelect.innerHTML = '<option value="">Select family...</option>';
 
@@ -561,22 +584,38 @@ async function loadImages(folderId) {
     return;
   }
 
+  console.log("[loadImages] selected folderId:", folderId);
+  const apiBase = getApiBaseUrl();
+  console.log("[loadImages] apiBase:", apiBase);
+  console.time("loadImages");
+
   showStatus("Loading images...", "");
   renderImageSkeletons(6);
 
   try {
-    const response = await apiFetch(`/drive/files/${encodeURIComponent(folderId)}`);
+    const apiPath = `/drive/files/${encodeURIComponent(folderId)}`;
+    console.log("[loadImages] calling API:", apiPath);
+    const response = await apiFetch(apiPath);
 
+    console.log("[loadImages] raw fetch response:", response);
     const data = await response.json();
+    console.log("[loadImages] parsed JSON:", data);
+
     const files = Array.isArray(data?.data) ? data.data : [];
     if (files.length === 0 || !files.some((file) => file?.id)) {
       console.warn("[images] No image files found for folder", folderId);
     }
 
+    // Prefer thumbnailLink from the backend when available to reduce payload size.
     const images = files
       .filter((file) => file?.id)
       .map((file) => {
-        const imageUrl = buildApiUrl(`/drive/image/${file.id}`);
+        const rel = buildApiUrl(`/drive/image/${file.id}`);
+        // Use thumbnailLink returned by backend if present, otherwise fall back
+        // to proxied backend image endpoint.
+        const imageUrlFromDrive = file.thumbnailLink || null;
+        const imageUrl = imageUrlFromDrive || (apiBase ? `${apiBase}${rel}` : rel);
+        console.log("[loadImages] generated image URL:", imageUrl, "(thumbnailLink present:", Boolean(file.thumbnailLink), ")");
         return {
           id: file.id,
           fileId: file.id,
@@ -586,12 +625,25 @@ async function loadImages(folderId) {
       })
       .filter((image) => image.url);
 
+    // Perform parallel HEAD requests to measure availability and timing without
+    // blocking rendering. Use Promise.allSettled so failures don't reject.
+    // Fire parallel checks for availability/timing but don't await them —
+    // allow rendering to proceed while diagnostics continue in background.
+    Promise.allSettled(
+      images.map((img) =>
+        fetch(img.url, { method: "GET" })
+          .then((resp) => console.log("[loadImages] image fetch status", img.url, resp.status, resp.ok))
+          .catch((err) => console.error("[loadImages] image fetch failed for", img.url, err.message || err)),
+      ),
+    );
+
     if (requestId !== activeImageLoadRequestId) {
       return;
     }
 
     renderImages(images);
     showStatus("", "");
+    console.timeEnd("loadImages");
     requestAnimationFrame(() => {
       logImageGridDiagnostics();
     });
@@ -630,6 +682,7 @@ function renderImages(images) {
 
     const img = document.createElement("img");
     const imageUrl = image.url;
+    console.log("[renderImages] rendering image url:", imageUrl, "fileId:", image.fileId);
     img.src = imageUrl;
     img.alt = "";
     img.loading = "lazy";
@@ -641,6 +694,7 @@ function renderImages(images) {
 
     img.addEventListener("load", () => {
       img.dataset.loadedUrl = img.currentSrc || img.src;
+      console.log("[renderImages] image loaded:", img.dataset.loadedUrl);
     });
 
     img.onerror = () => {
@@ -706,6 +760,102 @@ function handleUploadImageChange(event) {
     applyImageSelection();
   };
   reader.readAsDataURL(file);
+}
+
+function resetFormToInitialState() {
+  // Reset select and internal selection state
+  try {
+    if (familySelect) {
+      // leave the loaded family options intact, but reset selection to placeholder
+      try {
+        familySelect.selectedIndex = 0;
+      } catch (e) {
+        // fallback: set value to empty string
+        familySelect.value = "";
+      }
+    }
+
+    selectedFolderId = "";
+    selectedDriveImageUrl = "";
+    selectedDriveFileId = "";
+    uploadedImageUrl = "";
+    selectedImageUrl = "";
+    latestFormattedMessage = "";
+    activeImageLoadRequestId = 0;
+
+    // Clear image grid and remove any selection classes
+    imageGrid.replaceChildren();
+    document.querySelectorAll(".image-card.selected").forEach((el) => el.classList.remove("selected"));
+
+    // Clear selected image preview area and any cached image data
+    if (selectedImagePreview) {
+      try {
+        selectedImagePreview.removeAttribute("src");
+        selectedImagePreview.src = "";
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (selectedImagePreviewContainer) {
+      selectedImagePreviewContainer.replaceChildren();
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = "No image selected";
+      selectedImagePreviewContainer.appendChild(hint);
+      selectedImagePreviewContainer.style.display = "block";
+      selectedImagePreviewContainer.style.opacity = "1";
+    }
+
+    // Reset file input
+    if (uploadImageInput) {
+      try {
+        uploadImageInput.value = "";
+      } catch (e) {
+        // some browsers may throw when clearing files programmatically
+        const clone = uploadImageInput.cloneNode(true);
+        uploadImageInput.parentNode.replaceChild(clone, uploadImageInput);
+      }
+    }
+
+    // Reset form fields
+    if (postTypeInput) postTypeInput.selectedIndex = 0;
+    if (donationTypeInput) donationTypeInput.value = "";
+    setDefaultDonationDate();
+    if (mainPersonNameInput) mainPersonNameInput.value = "";
+    if (occasionTextInput) occasionTextInput.value = "";
+    if (countTextInput) countTextInput.value = "";
+    if (locationInput) locationInput.value = "";
+    if (customMessageInput) customMessageInput.value = "";
+    if (fullMessageInput) fullMessageInput.value = "";
+    if (familyNameInput) familyNameInput.value = "";
+
+    // Reset donors to single empty donor
+    donorsContainer.replaceChildren();
+    addDonor();
+
+    // Reset preview/editor
+    if (messageEditor) messageEditor.value = "";
+    syncRenderedPreview();
+
+    // Ensure any image-related UI is updated to reflect cleared state
+    try {
+      applyImageSelection();
+    } catch (e) {
+      console.error("applyImageSelection failed during reset:", e);
+    }
+
+    // Reset submit button state
+    updateSubmitState();
+    showStatus("", "");
+    // Scroll to top so the user sees the cleared form
+    try {
+      window.scrollTo(0, 0);
+    } catch (e) {
+      /* ignore in non-browser contexts */
+    }
+  } catch (err) {
+    console.error("resetFormToInitialState failed:", err);
+  }
 }
 
 familySelect.addEventListener("change", (event) => {
@@ -821,6 +971,13 @@ messageForm.addEventListener("submit", async (event) => {
 
     alert("Message scheduled successfully");
     showStatus("Message scheduled successfully", "success");
+
+    // Reset the form to initial state after a successful schedule
+    try {
+      resetFormToInitialState();
+    } catch (e) {
+      console.error("Failed to reset form after successful submit:", e);
+    }
   } catch (err) {
     console.error("[submit] Request failed:", err);
     const message = err?.message?.includes("Backend not reachable")

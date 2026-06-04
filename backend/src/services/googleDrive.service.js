@@ -64,13 +64,17 @@ async function getFolders(parentFolderId = appConfig.drive.rootFolderId) {
   }
 
   try {
+    const start = Date.now();
     const response = await drive.files.list({
       q: query,
-      fields: "files(id,name)",
+      // Request thumbnailLink so frontends can use lightweight thumbnails
+      fields: "files(id,name,thumbnailLink,mimeType,size)",
       pageSize: 1000,
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     });
+    const elapsed = Date.now() - start;
+    logger.info("Drive files.list elapsed_ms", { elapsedMs: elapsed, parentFolderId });
 
     const files = response?.data?.files || [];
     logger.info("Folders fetched", { count: files.length, parentFolderId });
@@ -103,16 +107,24 @@ async function getImages(folderId) {
   }
 
   try {
+    const start = Date.now();
     const response = await drive.files.list({
       q: query,
-      fields: "files(id,name)",
+      // include thumbnailLink to enable lightweight previews in the frontend
+      fields: "files(id,name,thumbnailLink,mimeType,size)",
       pageSize: 1000,
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     });
+    const elapsed = Date.now() - start;
+    logger.info("Drive files.list elapsed_ms", { elapsedMs: elapsed, folderId });
 
     const files = response?.data?.files || [];
     logger.info("Images fetched", { count: files.length, folderId });
+    if (files.length > 0) {
+      logger.debug("Image sample", files.slice(0, 5).map((f) => ({ id: f.id, name: f.name, thumbnail: f.thumbnailLink || null })));
+    }
+
     return files;
   } catch (error) {
     logger.error("Failed to fetch images", { error: error.message, folderId });

@@ -4,6 +4,7 @@ const {
   updateRowStatus,
   getPendingToday,
   findRowById,
+  claimRowForProcessing,
 } = require("../services/googleSheets.service");
 const { sendText, sendImage } = require("../services/greenapi.service");
 const appConfig = require("../config/appConfig");

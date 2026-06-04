@@ -317,7 +317,16 @@ async function getPendingToday() {
 
   const pending = allRows.filter((row) => {
     const rowDate = normalizeDonationDate(row.donationDate);
-    return rowDate === today && row.status === "PENDING";
+    const retryCount = parseInt(row.retryCount || "0", 10);
+    // Only return rows that are:
+    // 1. donationDate = today (IST)
+    // 2. status = PENDING (not SENT, not PROCESSING, not ERROR-maxed)
+    // 3. retryCount < 5 (abandon after 5 failures)
+    return (
+      rowDate === today &&
+      row.status === "PENDING" &&
+      retryCount < 5
+    );
   });
 
   logger.info("Pending rows for today", { count: pending.length, today });
@@ -330,6 +339,23 @@ async function findRowById(id) {
   return allRows.find((row) => String(row.id) === String(id)) || null;
 }
 
+// Atomically claim a row for processing — sets status to PROCESSING.
+// pending-today filters out PROCESSING rows, preventing concurrent duplicate sends.
+async function claimRowForProcessing(id) {
+  const row = await findRowById(id);
+  if (!row) return null;
+
+  // Already claimed by another execution or already sent — don't claim
+  if (row.status !== "PENDING") {
+    logger.warn("claimRowForProcessing: row not in PENDING state", { id, status: row.status });
+    return null;
+  }
+
+  await updateRowStatus(row.rowIndex, { status: "PROCESSING" });
+  logger.info("Row claimed for processing", { id, rowIndex: row.rowIndex });
+  return { ...row, status: "PROCESSING" };
+}
+
 module.exports = {
   appendSubmissionToSheet,
   buildSheetRow,
@@ -338,6 +364,7 @@ module.exports = {
   updateRowStatus,
   getPendingToday,
   findRowById,
+  claimRowForProcessing,
   SHEET_TAB_NAME,
   SPREADSHEET_ID,
   SHEET_COLUMNS,

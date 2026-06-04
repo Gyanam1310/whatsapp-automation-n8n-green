@@ -41,6 +41,7 @@ instances/
 
 # ── n8n local data ────────────────────────────────────────────────────────────
 .n8n/
+n8n-data/
 
 # ── Docker volumes / runtime data ────────────────────────────────────────────
 docker-data/
