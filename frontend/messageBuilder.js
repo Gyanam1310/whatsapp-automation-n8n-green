@@ -17,7 +17,8 @@
     return value ? "*" + value + "*" : "";
   }
 
-  var SEPARATOR = "━━━━━━━━━━━━━━━━";
+  var SEPARATOR = "--------------------------------------------";
+  var SEPARATOR_HEADER = "➖➖➖--------------------------------";
 
   // ─── centerLine(text, type) ────────────────────────────────────────────────
   // Lightweight visual centering via small left-padding.
@@ -132,7 +133,7 @@
     var name = clean(donorName);
     if (!name) return "";
     var cityPart = clean(city);
-    return "🔸 " + bold(name + (cityPart ? ", " + cityPart : ""));
+    return "🔸 " + bold(name) + (cityPart ? ", " + cityPart : "");
   }
 
   // ─── Post-type helpers ─────────────────────────────────────────────────────
@@ -160,9 +161,9 @@
   function getDonationLine(donationType) {
     var value = clean(donationType);
     if (!value) return "";
-    if (value.indexOf("एक समय") !== -1)  return "एक समय का गौ-आहार प्रदान कर्ता है :-";
-    if (value.indexOf("पूरे दिन") !== -1) return "पूरे दिन का गौ-आहार प्रदान कर्ता है :-";
-    if (value.indexOf("2 दिन") !== -1)    return "2 दिन का गौ-आहार प्रदान कर्ता है :-";
+    if (value.indexOf("एक समय") !== -1)  return bold("एक समय") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-";
+    if (value.indexOf("पूरे दिन") !== -1) return bold("पूरे दिन") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-";
+    if (value.indexOf("2 दिन") !== -1)    return bold("2 दिन") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-";
     return value + " प्रदान कर्ता है :-";
   }
 
@@ -217,51 +218,63 @@
     }
 
     function addSeparator() {
-      addGap();
+      // No blank lines before or after — separator sits directly between sections.
       lines.push(SEPARATOR);
     }
 
     // ── 1. Header ─────────────────────────────────────────────────────────
-    addCentered("🙏 जय जिनेंद्र 🙏 राम राम 🙏 जय गो माता 🙏", "header");
-    addCentered("🔶 " + bold("उज्जवल गौशाला ट्रस्ट") + " 🔶", "header");
-    addCentered("मुजबी, भंडारा", "location");
-    addSeparator();
+    addCentered(bold("जय जिनेंद्र 🙏 राम राम 🙏 जय गो माता"), "header");
+    addCentered(bold("🔶 उज्जवल गौशाला ट्रस्ट 🔶"), "header");
+    addCentered(bold("मुजबी, भंडारा"), "location");
+    lines.push(SEPARATOR);
 
     // ── 2. Donation title ─────────────────────────────────────────────────
     if (donationLine) {
-      addGap();
-      addCentered(bold(donationLine), "body");
+      addCentered(donationLine, "body");
+      lines.push(SEPARATOR_HEADER);
     }
 
-    // ── 3. Main person + occasion (Birthday / Punyatithi / Anniversary) ───
-    if (mainPersonName) {
-      addGap();
-      if (count) {
-        addCentered("🔸 " + bold(count), "donor");
+    // ── 3+4. Donor + person block ─────────────────────────────────────────
+    // For Birthday: Donor → occasion line → Birthday person
+    // For all others: Person → occasion line → Donor(s)
+    var isBirthday = postType === "Birthday";
+
+    if (isBirthday) {
+      // Donor(s) first
+      if (donors.length > 0) {
+        donors.forEach(function (donor, i) {
+          if (i > 0) addLine("");
+          addCentered(formatDonorWithCity(donor.name, location), "donor");
+          addCentered("द्वारा प्रदान किया जा रहा है।", "body");
+        });
       }
-      addCentered("🔸 " + bold(mainPersonName), "donor");
-      if (occasionLine) {
+      // Then birthday person + occasion
+      if (mainPersonName) {
+        if (count) addCentered("🔸 " + bold(count), "donor");
+        addCentered("🔸 " + bold(mainPersonName), "donor");
+        if (occasionLine) addCentered(occasionLine, "body");
+      }
+    } else {
+      // All other types: person + occasion first, then donor(s)
+      if (mainPersonName) {
+        if (count) addCentered("🔸 " + bold(count), "donor");
+        addCentered("🔸 " + bold(mainPersonName), "donor");
+        if (occasionLine) addCentered(occasionLine, "body");
+      } else if (occasionLine) {
         addCentered(occasionLine, "body");
       }
-    } else if (occasionLine) {
-      addGap();
-      addCentered(occasionLine, "body");
-    }
-
-    // ── 4. Donors ─────────────────────────────────────────────────────────
-    if (donors.length > 0) {
-      addGap();
-      donors.forEach(function (donor, i) {
-        if (i > 0) addGap();
-        addCentered(formatDonorWithCity(donor.name, location), "donor");
-        addCentered("द्वारा प्रदान किया जा रहा है।", "body");
-      });
+      if (donors.length > 0) {
+        donors.forEach(function (donor, i) {
+          if (i > 0) addLine("");
+          addCentered(formatDonorWithCity(donor.name, location), "donor");
+          addCentered("द्वारा प्रदान किया जा रहा है।", "body");
+        });
+      }
     }
 
     // ── 5. Custom message ─────────────────────────────────────────────────
     if (customMessage) {
       addSeparator();
-      addGap();
       customMessage.split("\n").forEach(function (line) {
         addLine(line.replace(/\s+$/, ""));
       });
@@ -269,13 +282,14 @@
 
     // ── 6. Thank-you footer ───────────────────────────────────────────────
     addSeparator();
-    addGap();
     if (familyName) {
-      addCentered(bold(familyName + " परिवार") + " का बहुत बहुत धन्यवाद 🙏", "footer");
-      addGap();
+      addCentered(bold(familyName + " परिवार") + " की जीव-दया की भावना के लिए बहोत बहोत धन्यवाद🙏", "footer");
     }
-    addCentered("🌼 गौ सेवा ही प्रभु सेवा", "footer");
-    addCentered("🌼 जीव-सेवा ही श्रेष्ठ दान", "footer");
+    addSeparator();
+    addCentered(bold("आप की गो-सेवा अनुकरणीय है 🙏"), "footer");
+    addCentered(bold("सराहनीय है 🙂"), "footer");
+    addSeparator();
+    addCentered(bold("गो सेवा है प्रभु सेवा 🔅 जीव-दया है श्रेष्ठ दान"), "footer");
 
     return lines.join("\n").replace(/[ \t]+$/gm, "").trim();
   }
