@@ -211,7 +211,7 @@
     var thankYouLine = bold(donorSurname + " परिवार") + " को बहोत धन्यवाद 🙏";
 
     // Intro line required before donor block for ALL post types
-    var INTRO_LINE = "उज्ज्वल गौरक्षण के सहयोग-दाता एवं कर्तव्यनिष्ठ गौभक्त :-";
+    var INTRO_LINE = bold("उज्ज्वल गौरक्षण के सहयोग-दाता एवं कर्तव्यनिष्ठ गौभक्त :-");
 
     // Classify post type
     var isPunyatithi   = postType === "Punyathithi";
@@ -245,12 +245,14 @@
     // ── 3. Body — strict templates per post type ────────────────────────────
 
     if (isPunyatithi) {
-      // पुण्यतिथि template
       L(INTRO_LINE);
+      L("");
       L("🔸 " + bold(donorName));
+      L("");
       L("          एवं परिवार की ओर से आदरणीय " + bold(donorRelation) + " --");
       L("");
       L("🔸 " + bold(mainPersonName || count));
+      L("");
       L("             की 🙏" + bold("पुण्यतिथि") + "🙏  निमीत्त " + bold("गौ-आहार") + " 🌾🌾,");
       L("सभी गौवंश को प्रदान किया जा रहा है।");
       L("");
@@ -259,32 +261,42 @@
       L(thankYouLine);
 
     } else if (isJanmajayanti) {
-      // जन्मजयंती template
       L(INTRO_LINE);
+      L("");
       L("🔸 " + bold(donorName));
+      L("");
       L("          एवं परिवार की ओर से आदरणीय " + bold(donorRelation) + " --");
       L("");
       L("🔸 " + bold(mainPersonName || count));
-      L("             के🙏 " + bold("जन्मजयंती") + " 🙏  के अवसर पर");
-      L(bold("गौ-आहार") + " 🌾🌾, सभी गौवंश को प्रदान किया जा रहा है।");
+      L("");
+      L("             के🙏 " + bold("जन्मजयंती") + " 🙏");
+      L("");
+      L("के अवसर पर " + bold("गौ-आहार") + " 🌾🌾, सभी गौवंश को प्रदान किया जा रहा है।");
       L("");
       L("उज्ज्वल गौरक्षण टीम की ओर से हम " + bold("श्रद्धांजलि अर्पित") + " करते हैं 🙏");
       L("");
       L(thankYouLine);
 
     } else if (isBirthday) {
-      // Birthday template
-      var shortName = mainPersonName ? mainPersonName.split(/\s+/)[0] : "";
+      var nameParts = mainPersonName
+        ? mainPersonName.replace(/^\s*श्री\s+/, "").split(/\s+/)
+        : [];
+      var nameWithHonorific = nameParts.length >= 2
+        ? nameParts[0] + " " + nameParts[1]
+        : (nameParts[0] || "");
       L(INTRO_LINE);
+      L("");
       L("🔸 " + bold(donorName));
+      L("");
       L("          एवं परिवार की ओर से " + bold(donorRelation) + " --");
       L("");
       L("🔸 " + bold(mainPersonName));
-      L("             के " + bold("जन्म दिवस") + " 🍨💐  के अवसर पर");
-      L(bold("गौ-आहार") + " 🌾🌾, सभी गौवंश को प्रदान किया जा रहा है।");
       L("");
-      L("उज्ज्वल गौरक्षण टीम की ओर से " + bold(shortName) + " " + bold("भाई") + " को बहोत‌ " + bold("बधाई") + " 💐एवं");
-      L(bold("खुशहाल") + " " + bold("धर्म मय") + " " + bold("जिवन") + " की " + bold("शुभकामनाएं") + " ।🙂");
+      L("             के " + bold("जन्म दिवस") + " 🍨💐");
+      L("");
+      L("के अवसर पर " + bold("गौ-आहार") + " 🌾🌾, सभी गौवंश को प्रदान किया जा रहा है।");
+      L("");
+      L("उज्ज्वल गौरक्षण टीम की ओर से " + bold(nameWithHonorific) + " को बहोत‌ " + bold("बधाई") + " 💐 एवं " + bold("खुशहाल") + " " + bold("धर्म मय") + " " + bold("जिवन") + " की " + bold("शुभकामनाएं") + " ।🙂");
       L("");
       L(thankYouLine);
 
