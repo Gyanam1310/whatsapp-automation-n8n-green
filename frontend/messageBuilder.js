@@ -66,6 +66,15 @@
     return clean(name).replace(/\s+family\s*$/i, "").trim();
   }
 
+  // Extract surname = last word of the donor name.
+  // "श्री धीरज जी प्रकाशजी गांधी" → "गांधी"
+  function extractSurname(donorName) {
+    var value = clean(donorName);
+    if (!value) return "";
+    var words = value.split(/\s+/);
+    return words[words.length - 1];
+  }
+
   // ─── Donor helpers ─────────────────────────────────────────────────────────
 
   function normalizeDonors(donors) {
@@ -197,6 +206,13 @@
     var donorName    = donor1 ? donor1.name : "";
     var donorRelation = donor1 ? (translateRelation(donor1.relation) || clean(donor1.relation)) : "";
 
+    // Surname for thank-you line: last word of primary donor name
+    var donorSurname = extractSurname(donorName);
+    var thankYouLine = bold(donorSurname + " परिवार") + " को बहोत धन्यवाद 🙏";
+
+    // Intro line required before donor block for ALL post types
+    var INTRO_LINE = "उज्ज्वल गौरक्षण के सहयोग-दाता एवं कर्तव्यनिष्ठ गौभक्त :-";
+
     // Classify post type
     var isPunyatithi   = postType === "Punyathithi";
     var isJanmajayanti = postType === "Anniversary"; // mapped to जन्मजयंती
@@ -230,6 +246,7 @@
 
     if (isPunyatithi) {
       // पुण्यतिथि template
+      L(INTRO_LINE);
       L("🔸 " + bold(donorName));
       L("          एवं परिवार की ओर से आदरणीय " + bold(donorRelation) + " --");
       L("");
@@ -239,39 +256,41 @@
       L("");
       L("उज्ज्वल गौरक्षण टीम की ओर से हम " + bold("श्रद्धांजलि अर्पित") + " करते हैं 🙏");
       L("");
-      L(bold(familyName) + " को बहोत धन्यवाद 🙏");
+      L(thankYouLine);
 
     } else if (isJanmajayanti) {
       // जन्मजयंती template
+      L(INTRO_LINE);
       L("🔸 " + bold(donorName));
       L("          एवं परिवार की ओर से आदरणीय " + bold(donorRelation) + " --");
       L("");
       L("🔸 " + bold(mainPersonName || count));
-      L("             के🙏 " + bold("जन्मजयंती") + " 🙏  के अवसर पर " + bold("गौ-आहार") + " 🌾🌾,");
-      L("सभी गौवंश को प्रदान किया जा रहा है।");
+      L("             के🙏 " + bold("जन्मजयंती") + " 🙏  के अवसर पर");
+      L(bold("गौ-आहार") + " 🌾🌾, सभी गौवंश को प्रदान किया जा रहा है।");
       L("");
       L("उज्ज्वल गौरक्षण टीम की ओर से हम " + bold("श्रद्धांजलि अर्पित") + " करते हैं 🙏");
       L("");
-      L(bold(familyName) + " को बहोत धन्यवाद 🙏");
+      L(thankYouLine);
 
     } else if (isBirthday) {
       // Birthday template
-      // Short name = first word of mainPersonName
       var shortName = mainPersonName ? mainPersonName.split(/\s+/)[0] : "";
+      L(INTRO_LINE);
       L("🔸 " + bold(donorName));
       L("          एवं परिवार की ओर से " + bold(donorRelation) + " --");
       L("");
       L("🔸 " + bold(mainPersonName));
-      L("             के " + bold("जन्म दिवस") + " 🍨💐  के अवसर पर " + bold("गौ-आहार") + " 🌾🌾,");
-      L("सभी गौवंश को प्रदान किया जा रहा है।");
+      L("             के " + bold("जन्म दिवस") + " 🍨💐  के अवसर पर");
+      L(bold("गौ-आहार") + " 🌾🌾, सभी गौवंश को प्रदान किया जा रहा है।");
       L("");
       L("उज्ज्वल गौरक्षण टीम की ओर से " + bold(shortName) + " " + bold("भाई") + " को बहोत‌ " + bold("बधाई") + " 💐एवं");
       L(bold("खुशहाल") + " " + bold("धर्म मय") + " " + bold("जिवन") + " की " + bold("शुभकामनाएं") + " ।🙂");
       L("");
-      L(bold(familyName) + " को बहोत धन्यवाद 🙏");
+      L(thankYouLine);
 
     } else {
-      // General Donation / Other — keep previous logic
+      // General Donation / Other
+      L(INTRO_LINE);
       if (mainPersonName) {
         if (count) C("🔸 " + bold(count), "donor");
         C("🔸 " + bold(mainPersonName), "donor");
@@ -285,9 +304,7 @@
         C(formatDonorWithCity(donor.name, location), "donor");
         C("द्वारा प्रदान किया जा रहा है।", "body");
       });
-      if (familyName) {
-        L(bold(familyName) + " को बहोत धन्यवाद 🙏");
-      }
+      L(thankYouLine);
     }
 
     // ── 5. Custom message ────────────────────────────────────────────────────
