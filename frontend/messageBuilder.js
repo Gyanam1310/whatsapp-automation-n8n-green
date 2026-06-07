@@ -17,29 +17,16 @@
     return value ? "*" + value + "*" : "";
   }
 
-  var SEPARATOR = "--------------------------------------------";
-  var SEPARATOR_HEADER = "➖➖➖--------------------------------";
+  // Standard separator used everywhere.
+  var SEP       = "----------------------------------------------------------";
+  // Used ONLY after "पुरे दिन" donation line.
+  var SEP_PURNA = "➖➖➖------------------------------------------";
 
   // ─── centerLine(text, type) ────────────────────────────────────────────────
-  // Lightweight visual centering via small left-padding.
-  // Works on WhatsApp mobile (proportional font) without causing word-wrap.
-  //
-  // type controls the reference width used for padding calculation:
-  //   "header"   → 42  (trust name, devotional greeting)
-  //   "location" → 44  (city/location — slightly wider target)
-  //   "donor"    → 38  (donor name lines)
-  //   "body"     → 36  (occasion lines, "द्वारा..." line)
-  //   "footer"   → 38  (slogans, thank-you)
-  //   "normal"   → 36  (default)
-  //
-  // Max padding: 12 spaces. Never pads lines longer than 38 visible chars.
-  //
-  // Visible length strips: * markers, emojis, leading/trailing whitespace.
 
-  var NEVER_PAD_ABOVE = 38;   // lines longer than this are left-aligned
+  var NEVER_PAD_ABOVE = 38;
   var MAX_PAD         = 12;
-  var LOCATION_EXTRA  = 10;   // extra indent for location line to visually
-                               // center it under the wider trust name above
+  var LOCATION_EXTRA  = 10;
 
   var TYPE_WIDTH = {
     header:   42,
@@ -50,13 +37,12 @@
     normal:   36,
   };
 
-  // Emoji regex — covers all common Unicode emoji blocks.
   var EMOJI_RE = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}]/gu;
 
   function visibleLength(text) {
     return text
-      .replace(/\*/g, "")        // strip bold markers
-      .replace(EMOJI_RE, "  ")   // each emoji ≈ 2 chars wide
+      .replace(/\*/g, "")
+      .replace(EMOJI_RE, "  ")
       .trim()
       .length;
   }
@@ -68,7 +54,6 @@
     if (vlen > NEVER_PAD_ABOVE) return value;
     var refWidth = TYPE_WIDTH[type] || TYPE_WIDTH.normal;
     var pad = Math.min(Math.floor((refWidth - vlen) / 2), MAX_PAD);
-    // Location line gets extra indent to visually align under the trust name.
     if (type === "location") {
       pad = Math.min(pad + LOCATION_EXTRA, MAX_PAD + LOCATION_EXTRA);
     }
@@ -77,7 +62,6 @@
 
   // ─── Name helpers ──────────────────────────────────────────────────────────
 
-  // Strip trailing "Family" (any case) so "Batra Family" → "Batra परिवार".
   function normalizeFamilyName(name) {
     return clean(name).replace(/\s+family\s*$/i, "").trim();
   }
@@ -107,7 +91,6 @@
     return value;
   }
 
-  // Public helper: bold name + optional relation in parens.
   function formatDonor(donor, includeRelation) {
     var name = clean(donor && donor.name);
     if (!name) return "";
@@ -117,7 +100,6 @@
     return rel ? label + " (" + rel + ")" : label;
   }
 
-  // Public helper: join multiple donors into one string.
   function formatDonors(donors, includeRelation) {
     var list = normalizeDonors(donors)
       .map(function (d) { return formatDonor(d, includeRelation); })
@@ -128,7 +110,6 @@
     return list.slice(0, -1).join(", ") + " एवं " + list[list.length - 1];
   }
 
-  // "🔸 *Name*, City"  or  "🔸 *Name*"  when city absent.
   function formatDonorWithCity(donorName, city) {
     var name = clean(donorName);
     if (!name) return "";
@@ -146,7 +127,8 @@
 
   function normalizePostType(postType) {
     var value = clean(postType);
-    return value === "Punyatithi" ? "Punyathithi" : value;
+    if (value === "Punyatithi") return "Punyathithi";
+    return value;
   }
 
   function getOccasionLine(postType) {
@@ -158,16 +140,36 @@
     }
   }
 
-  function getDonationLine(donationType) {
+  // Returns { line, isPurna } — isPurna drives separator choice.
+  function getDonationInfo(donationType) {
     var value = clean(donationType);
-    if (!value) return "";
-    if (value.indexOf("एक समय") !== -1)  return bold("एक समय") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-";
-    if (value.indexOf("पूरे दिन") !== -1) return bold("पूरे दिन") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-";
-    if (value.indexOf("2 दिन") !== -1)    return bold("2 दिन") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-";
-    return value + " प्रदान कर्ता है :-";
+    if (!value) return { line: "", isPurna: false };
+    if (value.indexOf("पुरे दिन") !== -1 || value.indexOf("पूरे दिन") !== -1) {
+      return {
+        line: bold("पुरे दिन") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-",
+        isPurna: true,
+      };
+    }
+    if (value.indexOf("एक समय") !== -1) {
+      return {
+        line: bold("एक समय") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-",
+        isPurna: false,
+      };
+    }
+    if (value.indexOf("2 दिन") !== -1) {
+      return {
+        line: bold("2 दिन") + " का " + bold("गौ-आहार") + " प्रदान कर्ता है :-",
+        isPurna: false,
+      };
+    }
+    return { line: value + " प्रदान कर्ता है :-", isPurna: false };
   }
 
-  // Legacy shim — kept so any external callers don't break.
+  // Legacy shim.
+  function getDonationLine(donationType) {
+    return getDonationInfo(donationType).line;
+  }
+
   function centerText(text, type) { return centerLine(clean(text), type); }
   function buildDonorLine(donorName) {
     var name = clean(donorName);
@@ -177,13 +179,12 @@
   // ─── Message builder ───────────────────────────────────────────────────────
 
   function generateMessage(data) {
-    // Custom template: return verbatim.
     var fullMessage = clean(data && data.fullMessage);
     if (fullMessage) return fullMessage;
 
     var postType       = normalizePostType(data && data.postType);
     var donationType   = clean(data && data.donationType);
-    var donationLine   = getDonationLine(donationType);
+    var donationInfo   = getDonationInfo(donationType);
     var mainPersonName = clean(data && data.mainPersonName);
     var occasionText   = clean(data && data.occasion);
     var location       = clean(data && data.location);
@@ -192,104 +193,124 @@
     var familyName     = normalizeFamilyName(data && data.familyName);
     var donors         = normalizeDonors(data && data.donors);
 
-    var occasionLine = postType === "Other Occasion"
-      ? (occasionText ? "के " + bold(occasionText) + " के शुभ अवसर पर" : "")
-      : getOccasionLine(postType);
+    var donor1 = donors.length > 0 ? donors[0] : null;
+    var donorName    = donor1 ? donor1.name : "";
+    var donorRelation = donor1 ? (translateRelation(donor1.relation) || clean(donor1.relation)) : "";
 
-    // ── Line buffer helpers ────────────────────────────────────────────────
+    // Classify post type
+    var isPunyatithi   = postType === "Punyathithi";
+    var isJanmajayanti = postType === "Anniversary"; // mapped to जन्मजयंती
+    var isBirthday     = postType === "Birthday";
+    var isMemorial     = isPunyatithi || isJanmajayanti;
 
     var lines = [];
 
-    function addLine(text) {
-      var value = typeof text === "string" ? text.replace(/\s+$/, "") : "";
-      lines.push(value);
+    function L(text) {
+      lines.push(typeof text === "string" ? text.replace(/\s+$/, "") : "");
+    }
+    function C(text, type) {
+      L(centerLine(text, type || "normal"));
+    }
+    function S() { L(SEP); }
+
+    // ── 1. Header (always identical) ────────────────────────────────────────
+    C(bold("जय जिनेंद्र 🙏राम राम 🙏जय गौ-माता"), "header");
+    C("♦️ " + bold("उज्ज्वल गौरक्षण ट्रस्ट") + " ♦️", "header");
+    C(bold("मुजबी, भंडारा"), "location");
+    S();
+
+    // ── 2. Donation title + separator ───────────────────────────────────────
+    if (donationInfo.line) {
+      C(donationInfo.line, "body");
+      // "पुरे दिन" → emoji separator; "एक समय" → plain separator
+      L(donationInfo.isPurna ? SEP_PURNA : SEP);
     }
 
-    // addCentered: pass type for line-sensitive padding.
-    function addCentered(text, type) {
-      addLine(centerLine(text, type || "normal"));
-    }
+    // ── 3. Body — strict templates per post type ────────────────────────────
 
-    function addGap() {
-      // Never add two consecutive blank lines.
-      if (lines.length > 0 && lines[lines.length - 1] !== "") {
-        lines.push("");
-      }
-    }
+    if (isPunyatithi) {
+      // पुण्यतिथि template
+      L("🔸 " + bold(donorName));
+      L("          एवं परिवार की ओर से आदरणीय " + bold(donorRelation) + " --");
+      L("");
+      L("🔸 " + bold(mainPersonName || count));
+      L("             की 🙏" + bold("पुण्यतिथि") + "🙏  निमीत्त " + bold("गौ-आहार") + " 🌾🌾,");
+      L("सभी गौवंश को प्रदान किया जा रहा है।");
+      L("");
+      L("उज्ज्वल गौरक्षण टीम की ओर से हम " + bold("श्रद्धांजलि अर्पित") + " करते हैं 🙏");
+      L("");
+      L(bold(familyName) + " को बहोत धन्यवाद 🙏");
 
-    function addSeparator() {
-      // No blank lines before or after — separator sits directly between sections.
-      lines.push(SEPARATOR);
-    }
+    } else if (isJanmajayanti) {
+      // जन्मजयंती template
+      L("🔸 " + bold(donorName));
+      L("          एवं परिवार की ओर से आदरणीय " + bold(donorRelation) + " --");
+      L("");
+      L("🔸 " + bold(mainPersonName || count));
+      L("             के🙏 " + bold("जन्मजयंती") + " 🙏  के अवसर पर " + bold("गौ-आहार") + " 🌾🌾,");
+      L("सभी गौवंश को प्रदान किया जा रहा है।");
+      L("");
+      L("उज्ज्वल गौरक्षण टीम की ओर से हम " + bold("श्रद्धांजलि अर्पित") + " करते हैं 🙏");
+      L("");
+      L(bold(familyName) + " को बहोत धन्यवाद 🙏");
 
-    // ── 1. Header ─────────────────────────────────────────────────────────
-    addCentered(bold("जय जिनेंद्र 🙏 राम राम 🙏 जय गो माता"), "header");
-    addCentered(bold("🔶 उज्जवल गौशाला ट्रस्ट 🔶"), "header");
-    addCentered(bold("मुजबी, भंडारा"), "location");
-    lines.push(SEPARATOR);
+    } else if (isBirthday) {
+      // Birthday template
+      // Short name = first word of mainPersonName
+      var shortName = mainPersonName ? mainPersonName.split(/\s+/)[0] : "";
+      L("🔸 " + bold(donorName));
+      L("          एवं परिवार की ओर से " + bold(donorRelation) + " --");
+      L("");
+      L("🔸 " + bold(mainPersonName));
+      L("             के " + bold("जन्म दिवस") + " 🍨💐  के अवसर पर " + bold("गौ-आहार") + " 🌾🌾,");
+      L("सभी गौवंश को प्रदान किया जा रहा है।");
+      L("");
+      L("उज्ज्वल गौरक्षण टीम की ओर से " + bold(shortName) + " " + bold("भाई") + " को बहोत‌ " + bold("बधाई") + " 💐एवं");
+      L(bold("खुशहाल") + " " + bold("धर्म मय") + " " + bold("जिवन") + " की " + bold("शुभकामनाएं") + " ।🙂");
+      L("");
+      L(bold(familyName) + " को बहोत धन्यवाद 🙏");
 
-    // ── 2. Donation title ─────────────────────────────────────────────────
-    if (donationLine) {
-      addCentered(donationLine, "body");
-      lines.push(SEPARATOR_HEADER);
-    }
-
-    // ── 3+4. Donor + person block ─────────────────────────────────────────
-    // For Birthday: Donor → occasion line → Birthday person
-    // For all others: Person → occasion line → Donor(s)
-    var isBirthday = postType === "Birthday";
-
-    if (isBirthday) {
-      // Donor(s) first
-      if (donors.length > 0) {
-        donors.forEach(function (donor, i) {
-          if (i > 0) addLine("");
-          addCentered(formatDonorWithCity(donor.name, location), "donor");
-          addCentered("द्वारा प्रदान किया जा रहा है।", "body");
-        });
-      }
-      // Then birthday person + occasion
-      if (mainPersonName) {
-        if (count) addCentered("🔸 " + bold(count), "donor");
-        addCentered("🔸 " + bold(mainPersonName), "donor");
-        if (occasionLine) addCentered(occasionLine, "body");
-      }
     } else {
-      // All other types: person + occasion first, then donor(s)
+      // General Donation / Other — keep previous logic
       if (mainPersonName) {
-        if (count) addCentered("🔸 " + bold(count), "donor");
-        addCentered("🔸 " + bold(mainPersonName), "donor");
-        if (occasionLine) addCentered(occasionLine, "body");
-      } else if (occasionLine) {
-        addCentered(occasionLine, "body");
+        if (count) C("🔸 " + bold(count), "donor");
+        C("🔸 " + bold(mainPersonName), "donor");
+        var oLine = postType === "Other Occasion"
+          ? (occasionText ? "के " + bold(occasionText) + " के शुभ अवसर पर" : "")
+          : getOccasionLine(postType);
+        if (oLine) C(oLine, "body");
       }
-      if (donors.length > 0) {
-        donors.forEach(function (donor, i) {
-          if (i > 0) addLine("");
-          addCentered(formatDonorWithCity(donor.name, location), "donor");
-          addCentered("द्वारा प्रदान किया जा रहा है।", "body");
-        });
+      donors.forEach(function (donor, i) {
+        if (i > 0) L("");
+        C(formatDonorWithCity(donor.name, location), "donor");
+        C("द्वारा प्रदान किया जा रहा है।", "body");
+      });
+      if (familyName) {
+        L(bold(familyName) + " को बहोत धन्यवाद 🙏");
       }
     }
 
-    // ── 5. Custom message ─────────────────────────────────────────────────
+    // ── 5. Custom message ────────────────────────────────────────────────────
     if (customMessage) {
-      addSeparator();
+      S();
       customMessage.split("\n").forEach(function (line) {
-        addLine(line.replace(/\s+$/, ""));
+        L(line.replace(/\s+$/, ""));
       });
     }
 
-    // ── 6. Thank-you footer ───────────────────────────────────────────────
-    addSeparator();
-    if (familyName) {
-      addCentered(bold(familyName + " परिवार") + " की जीव-दया की भावना के लिए बहोत बहोत धन्यवाद🙏", "footer");
+    // ── 6. Footer — two variants ─────────────────────────────────────────────
+    S();
+    if (isMemorial) {
+      // पुण्यतिथि / जन्मजयंती footer
+      C(bold("स्वजनों की स्मृति में गौ-आहार प्रदान करना,"), "footer");
+      C(bold("उत्तम श्रद्धांजलि होती है") + " 🙏", "footer");
+    } else {
+      // Birthday / Anniversary / General footer
+      C(bold("आप की‌ गौ-सेवा अनुकरणीय है") + "🙏", "footer");
+      C(bold("सराहनीय है") + "🙏", "footer");
     }
-    addSeparator();
-    addCentered(bold("आप की गो-सेवा अनुकरणीय है 🙏"), "footer");
-    addCentered(bold("सराहनीय है 🙂"), "footer");
-    addSeparator();
-    addCentered(bold("गो सेवा है प्रभु सेवा 🔅 जीव-दया है श्रेष्ठ दान"), "footer");
+    S();
+    C(bold("गौ सेवा है प्रभु सेवा") + " 🔅 " + bold("जिव-दया है") + " " + bold("श्रेष्ठ दान"), "footer");
 
     return lines.join("\n").replace(/[ \t]+$/gm, "").trim();
   }
