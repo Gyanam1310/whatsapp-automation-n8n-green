@@ -211,11 +211,11 @@
     var thankYouLine = bold(donorSurname + " परिवार") + " को बहोत धन्यवाद 🙏";
 
     // Intro line required before donor block for ALL post types
-    var INTRO_LINE = bold("उज्ज्वल गौरक्षण के सहयोग-दाता एवं कर्तव्यनिष्ठ गौभक्त :-");
+    var INTRO_LINE = "उज्ज्वल गौरक्षण के " + bold("सहयोग-दाता") + " एवं " + bold("कर्तव्यनिष्ठ गौभक्त") + " :-";
 
     // Classify post type
     var isPunyatithi   = postType === "Punyathithi";
-    var isJanmajayanti = postType === "Anniversary"; // mapped to जन्मजयंती
+    var isJanmajayanti = postType === "Anniversary" || postType === "Janmajayanti";
     var isBirthday     = postType === "Birthday";
     var isMemorial     = isPunyatithi || isJanmajayanti;
 
@@ -253,8 +253,9 @@
       L("");
       L("🔸 " + bold(mainPersonName || count));
       L("");
-      L("             की 🙏" + bold("पुण्यतिथि") + "🙏  निमीत्त " + bold("गौ-आहार") + " 🌾🌾,");
-      L("सभी गौवंश को प्रदान किया जा रहा है।");
+      L("             की 🙏" + bold("पुण्यतिथि") + "🙏");
+      L("");
+      L("के अवसर पर " + bold("गौ-आहार") + " 🌾🌾, सभी गौवंश को प्रदान किया जा रहा है।");
       L("");
       L("उज्ज्वल गौरक्षण टीम की ओर से हम " + bold("श्रद्धांजलि अर्पित") + " करते हैं 🙏");
       L("");

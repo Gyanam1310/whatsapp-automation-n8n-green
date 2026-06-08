@@ -64,11 +64,11 @@ function setDefaultDonationDate() {
 }
 
 function isMainPersonRequired(postType) {
-  return postType === "Birthday" || postType === "Punyatithi" || postType === "Anniversary";
+  return postType === "Birthday" || postType === "Punyatithi" || postType === "Anniversary" || postType === "Janmajayanti";
 }
 
 function shouldEnableCountField(postType) {
-  return postType === "Birthday" || postType === "Anniversary" || postType === "Punyatithi";
+  return postType === "Birthday" || postType === "Anniversary" || postType === "Punyatithi" || postType === "Janmajayanti";
 }
 
 function updateCountPlaceholder(postType) {
