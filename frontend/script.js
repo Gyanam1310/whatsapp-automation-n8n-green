@@ -160,11 +160,13 @@ function getDonors() {
 function togglePostTypeFields() {
   const postType = postTypeInput.value;
   const isOtherOccasion = postType === "Other Occasion";
+  const isGeneralDonation = postType === "General Donation";
+  const showOccasionField = isOtherOccasion || isGeneralDonation;
   const isCustomTemplate = postType === "Custom Template";
   const needsMainPerson = isMainPersonRequired(postType);
   const canUseCount = shouldEnableCountField(postType);
 
-  occasionTextGroup.style.display = isOtherOccasion ? "block" : "none";
+  occasionTextGroup.style.display = showOccasionField ? "block" : "none";
   fullMessageGroup.style.display = isCustomTemplate ? "block" : "none";
   mainPersonNameGroup.style.display = needsMainPerson ? "block" : "none";
   if (countGroup) {
@@ -177,7 +179,7 @@ function togglePostTypeFields() {
   }
   updateCountPlaceholder(postType);
 
-  if (!isOtherOccasion) {
+  if (!showOccasionField) {
     occasionTextInput.value = "";
   }
 
@@ -200,7 +202,7 @@ function getFormData() {
     donors: getDonors(),
     mainPersonName: mainPersonNameInput.value.trim(),
     familyName: familyNameInput.value.trim(),
-    occasion: postType === "Other Occasion" ? occasionTextInput.value.trim() : "",
+    occasion: (postType === "Other Occasion" || postType === "General Donation") ? occasionTextInput.value.trim() : "",
     count: countTextInput.value.trim(),
     location: locationInput.value.trim(),
     customMessage: customMessageInput.value.trim(),

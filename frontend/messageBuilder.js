@@ -315,7 +315,11 @@
       donors.forEach(function (donor, i) {
         if (i > 0) L("");
         C(formatDonorWithCity(donor.name, location), "donor");
-        C("द्वारा प्रदान किया जा रहा है।", "body");
+        if (occasionText) {
+          C("द्वारा " + bold(occasionText) + " के निमित्त प्रदान किया जा रहा है।", "body");
+        } else {
+          C("द्वारा प्रदान किया जा रहा है।", "body");
+        }
       });
       L(thankYouLine);
     }
