@@ -80,7 +80,7 @@ services:
       N8N_SECURE_COOKIE: "false"
       GENERIC_TIMEZONE: "Asia/Kolkata"
     volumes:
-      - ./n8n-data:/home/node/.n8n
+      - ./n8n-data/.n8n:/home/node/.n8n
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
       interval: 30s
@@ -94,8 +94,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
       - gaurakshan-network
     depends_on:
